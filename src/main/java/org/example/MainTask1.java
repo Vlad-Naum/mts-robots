@@ -1,5 +1,6 @@
 package org.example;
 
+import net.minidev.json.JSONArray;
 import net.minidev.json.JSONObject;
 import net.minidev.json.parser.JSONParser;
 import net.minidev.json.parser.ParseException;
@@ -9,6 +10,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 
 public class MainTask1 {
 
@@ -17,7 +19,6 @@ public class MainTask1 {
     public static final String FORWARD = "forward";
     public static final String LEFT = "left";
     public static final String RIGHT = "right";
-    public static final String BACK = "backward";
     public static final String DATA = "sensor-data";
     public static final String FRONT_DISTANCE = "front_distance";
     public static final String LEFT_DISTANCE = "left_side_distance";
@@ -39,7 +40,8 @@ public class MainTask1 {
                 .POST(HttpRequest.BodyPublishers.noBody())
                 .build();
         httpClient.send(request, HttpResponse.BodyHandlers.ofString()).body();
-        for (int i = 0; i < 1000; i++) {
+        long start = System.currentTimeMillis();
+        do {
             String jsonData = getData();
             JSONParser parser = new JSONParser(JSONParser.DEFAULT_PERMISSIVE_MODE);
             JSONObject json = (JSONObject) parser.parse(jsonData);
@@ -56,8 +58,13 @@ public class MainTask1 {
                 case S -> y++;
                 case W -> x--;
             }
-        }
-        System.out.println("end");
+        } while ((x != 0 || y != 15) &&
+                (System.currentTimeMillis() - start) < Duration.ofMinutes(5).toMillis());
+        httpClient = HttpClient.newHttpClient();
+        request = HttpRequest.newBuilder(URI.create("http://localhost:8801/api/v1/matrix/send?token=" + TOKEN))
+                .POST(HttpRequest.BodyPublishers.ofString(getResult().toJSONString()))
+                .build();
+        httpClient.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     public static String getData() throws IOException, InterruptedException {
@@ -72,9 +79,6 @@ public class MainTask1 {
         int frontDistance = json.getAsNumber(FRONT_DISTANCE).intValue();
         int leftDistance = json.getAsNumber(LEFT_DISTANCE).intValue();
         int rightDistance = json.getAsNumber(RIGHT_DISTANCE).intValue();
-        if (frontDistance > 5) {
-            return;
-        }
         if (rightDistance > 5) {
             HttpClient httpClient = HttpClient.newHttpClient();
             HttpRequest request = HttpRequest.newBuilder(URI.create(URL + RIGHT + "?token=" + TOKEN))
@@ -82,6 +86,8 @@ public class MainTask1 {
                     .build();
             httpClient.send(request, HttpResponse.BodyHandlers.ofString()).body();
             orientation = orientation == 4 ? N : ++orientation;
+        } else if (frontDistance > 5) {
+            return;
         } else if (leftDistance > 5) {
             HttpClient httpClient = HttpClient.newHttpClient();
             HttpRequest request = HttpRequest.newBuilder(URI.create(URL + LEFT + "?token=" + TOKEN))
@@ -101,7 +107,19 @@ public class MainTask1 {
         }
     }
 
-    private static void check(JSONObject json) throws ParseException {
+    public static JSONArray getResult() {
+        JSONArray jsonResult = new JSONArray();
+        for (int i = 0; i < 16; i++) {
+            JSONArray jsonArray = new JSONArray();
+            for (int j = 0; j < 16; j++) {
+                jsonArray.appendElement(result[i][j]);
+            }
+            jsonResult.appendElement(jsonArray);
+        }
+        return jsonResult;
+    }
+
+    private static void check(JSONObject json) {
         int frontDistance = json.getAsNumber(FRONT_DISTANCE).intValue();
         int leftDistance = json.getAsNumber(LEFT_DISTANCE).intValue();
         int rightDistance = json.getAsNumber(RIGHT_DISTANCE).intValue();
